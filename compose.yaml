@@ -1,0 +1,123 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm
+    environment:
+      POSTGRES_DB: ops_copilot
+      POSTGRES_USER: ops_app
+      POSTGRES_PASSWORD: local_dev_password
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ops_pgdata:/var/lib/postgresql/data
+      - ./docker/initdb/001-vector.sql:/docker-entrypoint-initdb.d/001-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ops_app -d ops_copilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    profiles: [full]
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ops_app:local_dev_password@db:5432/ops_copilot
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    profiles: [full]
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ops_app:local_dev_password@db:5432/ops_copilot
+      CORS_ORIGIN: http://localhost:8080
+      LIVE_DEMO_URL: http://checkout-demo:8081
+      OTEL_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+  worker:
+    profiles: [full]
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ops_app:local_dev_password@db:5432/ops_copilot
+      OTEL_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    command: ["python", "-m", "app.workflows.worker"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+  web:
+    profiles: [full]
+    build: ./frontend
+    ports: ["127.0.0.1:8080:80"]
+    depends_on:
+      api: {condition: service_healthy}
+      checkout-demo: {condition: service_healthy}
+    restart: unless-stopped
+  jaeger:
+    profiles: [full]
+    image: jaegertracing/all-in-one:1.76.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["127.0.0.1:16686:16686"]
+    restart: unless-stopped
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.3.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ops_promdata:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    depends_on: [api, worker]
+    restart: unless-stopped
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.6.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [prometheus]
+    restart: unless-stopped
+  checkout-demo:
+    profiles: [full]
+    build: ./demo_service
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  checkout-traffic:
+    profiles: [full]
+    build: ./demo_service
+    command: ["python", "traffic.py"]
+    depends_on:
+      checkout-demo: {condition: service_healthy}
+    restart: unless-stopped
+  checkout-collector:
+    profiles: [full]
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ops_app:local_dev_password@db:5432/ops_copilot
+      LIVE_DEMO_URL: http://checkout-demo:8081
+    command: ["python", "-m", "app.telemetry.live"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      checkout-demo: {condition: service_healthy}
+    restart: unless-stopped
+volumes:
+  ops_pgdata:
+  ops_promdata:
