@@ -1,10 +1,10 @@
-# Enterprise AI Operations Copilot · Stage 10
+# Enterprise AI Operations Copilot · 
 
 This release adds a **real local checkout HTTP service** and steady traffic to the earlier portfolio project. Its normal requests return 200; an admin can trigger a controlled 503 failure. A separate collector observes actual responses and durations, persists metrics and failure logs, and creates an alert and incident. The existing copilot can retrieve a live-service runbook, generate a cited investigation and run an approval-gated **simulated** workflow. This remains a local demo, not production monitoring or real remediation. This ZIP contains files, not a repository.
 
-## Upgrade the Stage 9 folder you already run (Git Bash)
+## Commands to run the project
 
-**Keep the same folder name** so Compose uses the existing PostgreSQL volume. Before overlaying files, run `bash scripts/backup.sh` in your Stage 9 project folder with `db` running. Extract this ZIP over that folder. Keep your private `backend/.env`. From the folder containing `compose.yaml`:
+From the folder containing `compose.yaml`:
 
 ```bash
 docker compose --profile full --profile observability up -d --build
@@ -12,7 +12,7 @@ docker compose --profile full --profile observability ps
 docker compose --profile full exec -T api alembic current
 ```
 
-Expect revision `0006_live_demo_cursor`. The new `checkout-demo`, `checkout-traffic`, and `checkout-collector` services should be running; `checkout-demo` should be healthy. The existing accounts/passwords remain. If you use a new extraction folder instead, the Compose project name and database volume may differ. Check `docker compose ls` and reuse the original project name with `docker compose -p OLD_PROJECT_NAME ...` for every command. Never use `docker compose down -v` when keeping data.
+Expect revision `0006_live_demo_cursor`. The new `checkout-demo`, `checkout-traffic`, and `checkout-collector` services should be running; `checkout-demo` should be healthy. If you use a new extraction folder instead, the Compose project name and database volume may differ. Check `docker compose ls` and reuse the original project name with `docker compose -p OLD_PROJECT_NAME ...` for every command. Never use `docker compose down -v` when keeping data.
 
 ## Show the real HTTP chain
 
