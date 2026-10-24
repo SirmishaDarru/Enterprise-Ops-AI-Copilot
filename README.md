@@ -26,6 +26,6 @@ If **Live checkout service** says unavailable, check `docker compose --profile f
 
 ## Verify and explain
 
-From `backend` in Git Bash, run `py -3.12 -m uv sync --frozen --extra dev`, then `py -3.12 -m uv run --frozen python -m app.review.live_run --base-url http://127.0.0.1:8080 --output ../review-live-stage10.json`. It asks for the seeded password, checks the observed batch, alert and cited mock investigation, and clears the failure even if a check fails. The prior three-journey review and deterministic evaluation remain available. Read [`docs/status.md`](docs/status.md) before claiming end-to-end acceptance. For an interview, use the updated [`docs/demo.md`](docs/demo.md) and [`docs/portfolio.md`](docs/portfolio.md).
+From `backend` in Git Bash, run `py -3.12 -m uv sync --frozen --extra dev`, then `py -3.12 -m uv run --frozen python -m app.review.live_run --base-url http://127.0.0.1:8080 --output ../review-live-stage10.json`. It asks for the seeded password, checks the observed batch, alert and cited mock investigation, and clears the failure even if a check fails. The prior three-journey review and deterministic evaluation remain available. 
 
 This target has an in-memory event buffer and fixed traffic. The collector records an explicit gap if it falls behind. A controlled pool-exhaustion message is **not** evidence of a real database outage. No production telemetry, real checkout transactions or external remediation is claimed.
