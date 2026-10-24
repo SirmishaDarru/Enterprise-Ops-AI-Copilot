@@ -1,0 +1,64 @@
+name: checks
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:0.8.7-pg17-bookworm
+        env:
+          POSTGRES_DB: ops_copilot
+          POSTGRES_USER: ops_app
+          POSTGRES_PASSWORD: local_dev_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ops_app -d ops_copilot"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://ops_app:local_dev_password@localhost:5432/ops_copilot
+      TEST_DATABASE_URL: postgresql+psycopg://ops_app:local_dev_password@localhost:5432/ops_copilot
+      JWT_SECRET: ci-test-secret-at-least-thirty-two-characters
+      APP_ENV: test
+      EMBEDDING_MODE: mock
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen alembic upgrade head
+      - run: uv run --frozen ruff check app tests alembic
+      - run: uv run --frozen pytest -q
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp backend/.env.example backend/.env
+      - run: docker compose --profile full --profile observability config --quiet
+      - run: docker compose --profile full --profile observability build api worker web checkout-demo checkout-traffic checkout-collector
+
+  checkout_http:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest demo_service.test_server
